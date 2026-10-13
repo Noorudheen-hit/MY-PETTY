@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1f4e79">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="My Petty">
+<title>My Petty</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.28.1/lib/msal-browser.min.js"></script>
+<style>
+:root{
+  --navy:#1f4e79; --navy-2:#173b5c; --bg:#f3f5f8; --card:#fff; --ink:#15212e; --muted:#6b7785;
+  --line:#e2e7ee; --ok:#1e8e5a; --err:#c0392b; --warn:#b7791f; --chip:#eef3f8;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f151c; --card:#18212b; --ink:#e7edf3; --muted:#93a1b0; --line:#26323f; --chip:#1f2b38; --navy:#2f6ea6; --navy-2:#255a89;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f151c; --card:#18212b; --ink:#e7edf3; --muted:#93a1b0; --line:#26323f; --chip:#1f2b38; --navy:#2f6ea6; --navy-2:#255a89;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;-webkit-tap-highlight-color:transparent}
+.wrap{max-width:480px;margin:0 auto;padding:16px 16px calc(24px + env(safe-area-inset-bottom))}
+header{display:flex;align-items:center;justify-content:space-between;margin:4px 0 14px}
+header h1{font-size:20px;margin:0;font-weight:700;letter-spacing:.2px}
+header .who{font-size:12px;color:var(--muted);text-align:right}
+header .who button{background:none;border:0;color:var(--navy);font:inherit;font-size:12px;padding:0;cursor:pointer}
+.hand{background:var(--navy);color:#fff;border-radius:14px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.hand small{opacity:.8;font-size:12px;letter-spacing:.6px;text-transform:uppercase}
+.hand b{font-family:"IBM Plex Mono",monospace;font-size:22px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+label{display:block;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:0 0 6px}
+.field{margin-bottom:14px}
+input,select{width:100%;font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px}
+input:focus{outline:2px solid var(--navy);outline-offset:-1px;border-color:transparent}
+.amount{position:relative}
+.amount span{position:absolute;left:14px;top:50%;transform:translateY(-50%);font-weight:600;color:var(--muted)}
+.amount input{padding-left:46px;font-family:"IBM Plex Mono",monospace;font-size:28px;font-weight:600}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chips{display:flex;gap:8px}
+.chips button{flex:1;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--chip);color:var(--ink);font:inherit;font-weight:600;font-size:14px}
+.chips button.on{background:var(--navy);border-color:var(--navy);color:#fff}
+.go{width:100%;border:0;border-radius:12px;background:var(--navy);color:#fff;font:inherit;font-size:18px;font-weight:700;padding:16px;margin-top:4px;cursor:pointer}
+.go:active{background:var(--navy-2)}
+.go:disabled{opacity:.55}
+.msg{min-height:22px;font-size:14px;margin:10px 2px 0;font-weight:500}
+.msg.ok{color:var(--ok)} .msg.err{color:var(--err)} .msg.warn{color:var(--warn)}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:22px 2px 8px;display:flex;justify-content:space-between}
+h2 button{background:none;border:0;color:var(--navy);font:inherit;font-size:12px;cursor:pointer}
+.list{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.item{display:grid;grid-template-columns:62px 1fr auto;gap:10px;padding:11px 14px;border-top:1px solid var(--line);align-items:center}
+.item:first-child{border-top:0}
+.item .d{font-size:12px;color:var(--muted)}
+.item .p{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .p i{color:var(--muted);font-style:normal;font-size:12px}
+.item .a{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:14px}
+.empty{padding:16px;color:var(--muted);font-size:14px;text-align:center}
+.center{text-align:center;padding:40px 8px}
+.center p{color:var(--muted);line-height:1.5}
+.hidden{display:none!important}
+code{background:var(--chip);padding:2px 5px;border-radius:5px;font-size:12px;word-break:break-all}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>My Petty</h1>
+    <div class="who" id="who"></div>
+  </header>
+
+  <!-- First run: ask for the Azure app (client) ID -->
+  <section id="setup" class="card hidden">
+    <label for="cid">Azure App (client) ID</label>
+    <input id="cid" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off">
+    <p style="font-size:13px;color:var(--muted);line-height:1.5">One-time setup. Paste the Application (client) ID from your Azure app registration. Redirect URI to register: <code id="ruri"></code></p>
+    <button class="go" id="saveCid">Save</button>
+  </section>
+
+  <section id="signin" class="center hidden">
+    <p>Sign in with your Al Habari Microsoft account to save entries to<br><b>OneDrive › MY PETTY › MY_NEW_PETTY.xlsx</b></p>
+    <button class="go" id="loginBtn">Sign in with Microsoft</button>
+  </section>
+
+  <section id="app" class="hidden">
+    <div class="hand"><small>Bills in hand</small><b id="handTotal">—</b></div>
+
+    <form class="card" id="f" autocomplete="off">
+      <div class="field amount">
+        <label for="amt">Amount</label>
+        <div style="position:relative"><span>QR</span><input id="amt" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" required></div>
+      </div>
+      <div class="field">
+        <label for="purpose">Purpose</label>
+        <input id="purpose" list="purposes" placeholder="e.g. food, trailor, first aid box">
+        <datalist id="purposes"></datalist>
+      </div>
+      <div class="field">
+        <label for="note">Note (optional)</label>
+        <input id="note" placeholder="e.g. Salim">
+      </div>
+      <div class="row2 field">
+        <div><label for="dt">Date</label><input id="dt" type="date"></div>
+        <div><label>Status</label>
+          <div class="chips" id="status"><button type="button" class="on" data-v="HAND">HAND</button><button type="button" data-v="SUBMITTED">SUBM.</button></div>
+        </div>
+      </div>
+      <button class="go" id="enter" type="submit">ENTER</button>
+      <div class="msg" id="msg"></div>
+    </form>
+
+    <h2><span>Recent entries</span><button id="refresh" type="button">Refresh</button></h2>
+    <div class="list" id="recent"><div class="empty">Loading…</div></div>
+  </section>
+</div>
+
+<script>
+/* ===== Settings ===== */
+const CLIENT_ID_DEFAULT = '';   // optional: paste your Azure client ID here so the setup screen never shows
+const FILE_ID   = '017SICUOOQOUYGMDCILJFI723JHLYKSMUC';     // MY_NEW_PETTY.xlsx in OneDrive
+const FILE_PATH = '/MY PETTY/MY_NEW_PETTY.xlsx';            // fallback if the file is replaced
+const SHEET     = 'MY BILL';
+const TABLE     = 'Table1';
+const HAND_CELL = 'I1';
+const SCOPES    = ['Files.ReadWrite', 'User.Read'];
+const G = 'https://graph.microsoft.com/v1.0';
+
+/* ===== Small helpers ===== */
+const $ = id => document.getElementById(id);
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+const show = id => ['setup','signin','app'].forEach(s => $(s).classList.toggle('hidden', s !== id));
+const fmtQR = n => 'QR ' + Number(n || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+const todayISO = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10); };
+const isoToSerial = iso => { const [y,m,d] = iso.split('-').map(Number); return Date.UTC(y, m-1, d)/86400000 + 25569; };
+const serialToLabel = s => {
+  if (typeof s !== 'number') return String(s || '');
+  const d = new Date(Math.round((s - 25569) * 86400000));
+  return d.toLocaleDateString('en-GB', {day:'2-digit', month:'short', timeZone:'UTC'});
+};
+function setMsg(t, cls){ const m = $('msg'); m.textContent = t; m.className = 'msg ' + (cls || ''); }
+
+/* ===== Auth ===== */
+let pca, account;
+const redirectUri = location.origin + location.pathname;
+$('ruri').textContent = redirectUri;
+
+async function initAuth(){
+  const clientId = CLIENT_ID_DEFAULT || store.get('clientId', '');
+  if (!clientId){ show('setup'); return; }
+  pca = new msal.PublicClientApplication({
+    auth: { clientId, authority: 'https://login.microsoftonline.com/organizations', redirectUri },
+    cache: { cacheLocation: 'localStorage' }
+  });
+  await pca.initialize();
+  const res = await pca.handleRedirectPromise().catch(e => { console.error(e); return null; });
+  account = (res && res.account) || pca.getAllAccounts()[0];
+  if (!account){ show('signin'); return; }
+  pca.setActiveAccount(account);
+  $('who').innerHTML = `${account.username}<br><button id="out">Sign out</button>`;
+  $('out').onclick = () => pca.logoutRedirect({ account });
+  show('app');
+  boot();
+}
+
+async function token(){
+  try{
+    return (await pca.acquireTokenSilent({ scopes: SCOPES, account })).accessToken;
+  }catch(e){
+    await pca.acquireTokenRedirect({ scopes: SCOPES, account });
+    throw e;
+  }
+}
+
+/* ===== Graph / Excel ===== */
+let wbBase = `${G}/me/drive/items/${FILE_ID}/workbook`;
+async function gx(path, opts = {}){
+  const t = await token();
+  const call = base => fetch(base + path, { ...opts, headers: { 'Authorization': 'Bearer ' + t, 'Content-Type': 'application/json' } });
+  let r = await call(wbBase);
+  if (r.status === 404 && !wbBase.includes('root:')){
+    wbBase = `${G}/me/drive/root:${encodeURI(FILE_PATH)}:/workbook`;
+    r = await call(wbBase);
+  }
+  if (!r.ok){ const b = await r.text(); throw new Error(r.status + ' ' + b.slice(0, 200)); }
+  return r.status === 204 ? null : r.json();
+}
+
+async function addRow(e){
+  return gx(`/tables/${TABLE}/rows`, {
+    method: 'POST',
+    body: JSON.stringify({ values: [[ isoToSerial(e.date), e.amount, e.purpose, e.status, e.note ]] })
+  });
+}
+
+async function loadRecent(){
+  try{
+    const data = await gx(`/tables/${TABLE}/rows`);
+    const rows = (data.value || []).map(r => r.values[0]).filter(v => v[1] !== '' && v[1] != null);
+    const purposes = [...new Set(rows.map(v => String(v[2] || '').trim()).filter(Boolean))];
+    $('purposes').innerHTML = purposes.map(p => `<option value="${p.replace(/"/g,'&quot;')}">`).join('');
+    const last = rows.slice(-12).reverse();
+    $('recent').innerHTML = last.length ? last.map(v => `
+      <div class="item">
+        <div class="d">${serialToLabel(v[0])}</div>
+        <div class="p">${esc(v[2] || '—')}${v[4] ? ` <i>· ${esc(v[4])}</i>` : ''}${v[3] && v[3] !== 'HAND' ? ` <i>· ${esc(v[3])}</i>` : ''}</div>
+        <div class="a">${Number(v[1]).toLocaleString('en-US',{minimumFractionDigits:2})}</div>
+      </div>`).join('') : '<div class="empty">No entries yet</div>';
+  }catch(err){
+    console.error(err);
+    $('recent').innerHTML = `<div class="empty">Couldn't load entries (${esc(err.message.slice(0,80))})</div>`;
+  }
+  try{
+    const r = await gx(`/worksheets('${encodeURIComponent(SHEET)}')/range(address='${HAND_CELL}')`);
+    $('handTotal').textContent = fmtQR(r.values[0][0]);
+  }catch(err){ console.error(err); }
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ===== Offline queue: entries that failed are kept and retried ===== */
+const queue = () => store.get('pending', []);
+async function flush(){
+  let q = queue(), left = [];
+  for (const e of q){ try{ await addRow(e); }catch(err){ left.push(e); } }
+  store.set('pending', left);
+  return { sent: q.length - left.length, left: left.length };
+}
+
+/* ===== UI ===== */
+let status = 'HAND';
+$('status').onclick = ev => {
+  const b = ev.target.closest('button'); if (!b) return;
+  status = b.dataset.v;
+  [...$('status').children].forEach(x => x.classList.toggle('on', x === b));
+};
+
+$('f').onsubmit = async ev => {
+  ev.preventDefault();
+  const amount = parseFloat($('amt').value);
+  if (!(amount > 0)){ setMsg('Enter an amount', 'err'); $('amt').focus(); return; }
+  const entry = { date: $('dt').value || todayISO(), amount, purpose: $('purpose').value.trim(), note: $('note').value.trim(), status };
+  $('enter').disabled = true; setMsg('Saving to Excel…');
+  try{
+    await addRow(entry);
+    setMsg(`✓ Saved ${fmtQR(amount)} to MY BILL`, 'ok');
+    $('amt').value = ''; $('purpose').value = ''; $('note').value = '';
+    $('dt').value = todayISO();
+    loadRecent();
+  }catch(err){
+    console.error(err);
+    store.set('pending', [...queue(), entry]);
+    setMsg(`Couldn't reach OneDrive — saved on this phone, will retry (${queue().length} pending)`, 'warn');
+  }finally{
+    $('enter').disabled = false;
+  }
+};
+
+$('refresh').onclick = async () => {
+  if (queue().length){ const r = await flush(); if (r.sent) setMsg(`✓ Synced ${r.sent} pending entr${r.sent>1?'ies':'y'}`, 'ok'); }
+  loadRecent();
+};
+
+$('saveCid').onclick = () => {
+  const v = $('cid').value.trim();
+  if (!/^[0-9a-f-]{36}$/i.test(v)){ alert('That does not look like a client ID'); return; }
+  store.set('clientId', v); initAuth();
+};
+$('loginBtn').onclick = () => pca.loginRedirect({ scopes: SCOPES, prompt: 'select_account' });
+
+async function boot(){
+  $('dt').value = todayISO();
+  if (queue().length){ const r = await flush(); if (r.sent) setMsg(`✓ Synced ${r.sent} pending entr${r.sent>1?'ies':'y'}`, 'ok'); }
+  loadRecent();
+}
+window.addEventListener('online', () => { if (account) flush().then(loadRecent); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && account){ if (!$('amt').value) $('dt').value = todayISO(); } });
+
+initAuth();
+</script>
+</body>
+</html>
