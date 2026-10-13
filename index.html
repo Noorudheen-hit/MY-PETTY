@@ -294,9 +294,9 @@ $('f').onsubmit = async ev => {
     loadRecent();
   }catch(err){
     console.error(err);
-    if (err.status && err.status < 500 && err.status !== 429){ setMsg(`Excel rejected the entry: ${err.message.slice(0,200)}`, 'err'); return; }
+    if (err.status && err.status < 500 && err.status !== 429 && err.status !== 409){ setMsg(`Excel rejected the entry: ${err.message.slice(0,200)}`, 'err'); return; }
     store.set('pending', [...queue(), entry]);
-    setMsg(`Couldn't reach OneDrive — saved on this phone, will retry (${queue().length} pending)`, 'warn');
+    setMsg(err.status === 409 ? `Excel file is open/locked on another device — saved on this phone, will add automatically when it's free (${queue().length} pending)` : `Couldn't reach OneDrive — saved on this phone, will retry (${queue().length} pending)`, 'warn');
   }finally{
     $('enter').disabled = false;
   }
@@ -378,6 +378,8 @@ async function boot(){
   if (queue().length){ const r = await flush(); if (r.sent) setMsg(`✓ Synced ${r.sent} pending entr${r.sent>1?'ies':'y'}`, 'ok'); }
   loadRecent();
 }
+// Workbook locked by Excel desktop (409) or offline: keep retrying pending entries every minute
+setInterval(() => { if (account && queue().length) flush().then(r => { if (r.sent){ setMsg(`✓ Synced ${r.sent} pending entr${r.sent>1?'ies':'y'}`, 'ok'); loadRecent(); } }); }, 60000);
 window.addEventListener('online', () => { if (account) flush().then(loadRecent); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && account){ if (!$('amt').value) $('dt').value = todayISO(); } });
 
