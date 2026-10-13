@@ -78,6 +78,8 @@ h2 button{background:none;border:0;color:var(--navy);font:inherit;font-size:12px
 .sum.pay{background:#fde2e4;color:#b42318}
 .sum.sub{background:#fff1c2;color:#8a5a00}
 .sum.done{background:#d9f2e1;color:#16794a}
+.sum.edit{cursor:pointer}
+.sum.edit i{font-style:normal;opacity:.6;font-size:13px}
 code{background:var(--chip);padding:2px 5px;border-radius:5px;font-size:12px;word-break:break-all}
 </style>
 </head>
@@ -313,38 +315,57 @@ $('saveCid').onclick = () => {
 $('loginBtn').onclick = () => pca.loginRedirect({ scopes: SCOPES, prompt: 'select_account' });
 
 /* ===== Summary: first worksheet of the workbook ===== */
+const EDITABLE = ['DEBIT CARD', 'CREDIT CARD NOW'];
+let sumSheet = '';
+const colName = n => { let t = ''; for (n++; n > 0; n = Math.floor((n - 1) / 26)) t = String.fromCharCode(65 + (n - 1) % 26) + t; return t; };
+const sheetPath = n => `/worksheets('${encodeURIComponent(n.replace(/'/g, "''"))}')`;
+
 async function loadSummary(){
   try{
     const sheets = (await gx(`/worksheets?$select=name,position`)).value.sort((a, b) => a.position - b.position);
-    const name = sheets[0].name;
+    sumSheet = sheets[0].name;
     $('sumTitle').textContent = 'Totals';
-    const r = await gx(`/worksheets('${encodeURIComponent(name.replace(/'/g, "''"))}')/usedRange(valuesOnly=true)?$select=text`);
-    // Only the totals block: the label column around the "SUM OF B:B" cell, with the value to its right
+    const r = await gx(`${sheetPath(sumSheet)}/usedRange(valuesOnly=true)?$select=text,address`);
+    // Top-left of the used range, so grid positions can be turned back into cell addresses
+    const m = /!?\$?([A-Z]+)\$?(\d+)/.exec(String(r.address).split('!').pop());
+    const c0 = [...m[1]].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1, r0 = +m[2];
     const g = (r.text || []).map(row => row.map(t => String(t).trim()));
+    const cell = (i, j) => { const k = g[i].findIndex((t, x) => x > j && t); return { value: k < 0 ? '' : g[i][k], addr: k < 0 ? '' : colName(c0 + k) + (r0 + i) }; };
+    // Only the totals block: the label column around the "SUM OF B:B" cell, with the value to its right
     let ar = -1, ac = -1;
     g.forEach((row, i) => { const j = row.findIndex(t => t.toUpperCase() === 'SUM OF B:B'); if (j >= 0 && ar < 0){ ar = i; ac = j; } });
     const rows = [];
     if (ar >= 0){
       let top = ar; while (top > 0 && g[top-1][ac]) top--;
-      for (let i = top; i < g.length && g[i][ac]; i++){
-        const value = g[i].slice(ac + 1).find(Boolean) || '';
-        rows.push([g[i][ac], value]);
-      }
+      for (let i = top; i < g.length && g[i][ac]; i++) rows.push({ label: g[i][ac], ...cell(i, ac) });
     }
     // "CREDIT CARD NOW" sits elsewhere on the sheet
-    g.some(row => { const j = row.findIndex(t => t.toUpperCase() === 'CREDIT CARD NOW'); if (j < 0) return false; rows.push([row[j], row.slice(j + 1).find(Boolean) || '']); return true; });
+    g.some((row, i) => { const j = row.findIndex(t => t.toUpperCase() === 'CREDIT CARD NOW'); if (j < 0) return false; rows.push({ label: row[j], ...cell(i, j) }); return true; });
     const WANT = ['TOTAL', 'PAY', 'DEBIT CARD', 'WALLET', 'FOR SUBMISSION', 'SUBMITTED AMOUNT', 'CREDIT CARD NOW'];
-    rows.splice(0, rows.length, ...WANT.map(w => rows.find(([l]) => l.toUpperCase() === w)).filter(Boolean));
-    $('summary').innerHTML = rows.length ? rows.map(([label, value]) => {
-      const u = label.toUpperCase();
+    const shown = WANT.map(w => rows.find(x => x.label.toUpperCase() === w)).filter(Boolean);
+    $('summary').innerHTML = shown.length ? shown.map(({ label, value, addr }) => {
+      const u = label.toUpperCase(), edit = EDITABLE.includes(u) && addr;
       const cls = u === 'CREDIT CARD NOW' ? 'pay' : u.startsWith('SUBMITTED') ? 'done' : u.startsWith('FOR SUBMISSION') ? 'sub' : u === 'PAY' ? 'pay' : u === 'TOTAL' ? 'total' : '';
-      return `<div class="sum ${cls}"><span>${esc(label)}</span><span class="v">${esc(value)}</span></div>`;
+      return `<div class="sum ${cls}${edit ? ' edit' : ''}"${edit ? ` data-addr="${addr}" data-label="${esc(label)}" data-value="${esc(value)}"` : ''}><span>${esc(label)}${edit ? ' <i>✎</i>' : ''}</span><span class="v">${esc(value)}</span></div>`;
     }).join('') : '<div class="empty">Totals block not found (looking for "SUM OF B:B")</div>';
   }catch(err){
     console.error(err);
     $('summary').innerHTML = `<div class="empty">Couldn't load summary (${esc(err.message.slice(0,80))})</div>`;
   }
 }
+$('summary').onclick = async ev => {
+  const row = ev.target.closest('.sum.edit'); if (!row) return;
+  const cur = row.dataset.value.replace(/[^0-9.\-]/g, '');
+  const v = prompt(`New ${row.dataset.label} amount (QR)`, cur);
+  if (v == null || v.trim() === '') return;
+  const n = parseFloat(v.replace(/,/g, ''));
+  if (isNaN(n)){ alert('Enter a number'); return; }
+  row.querySelector('.v').textContent = 'Saving…';
+  try{
+    await gx(`${sheetPath(sumSheet)}/range(address='${row.dataset.addr}')`, { method: 'PATCH', body: JSON.stringify({ values: [[n]] }) });
+  }catch(err){ console.error(err); alert(`Couldn't save: ${err.message.slice(0,160)}`); }
+  loadSummary();
+};
 $('tabs').onclick = ev => {
   const b = ev.target.closest('button'); if (!b) return;
   [...$('tabs').children].forEach(x => { x.classList.toggle('on', x === b); $(x.dataset.p).classList.toggle('hidden', x !== b); });
