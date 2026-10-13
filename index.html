@@ -156,7 +156,7 @@ async function initAuth(){
   const clientId = CLIENT_ID_DEFAULT || store.get('clientId', '');
   if (!clientId){ show('setup'); return; }
   pca = new msal.PublicClientApplication({
-    auth: { clientId, authority: 'https://login.microsoftonline.com/organizations', redirectUri },
+    auth: { clientId, authority: 'https://login.microsoftonline.com/alhabariservices.com', redirectUri },
     cache: { cacheLocation: 'localStorage' }
   });
   await pca.initialize();
