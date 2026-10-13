@@ -231,10 +231,12 @@ async function gx(path, opts = {}){
 }
 
 async function addRow(e){
-  return gx(`/tables/${TABLE}/rows`, {
-    method: 'POST',
-    body: JSON.stringify({ values: [[ isoToSerial(e.date), e.amount, e.purpose, e.status, e.note ]] })
-  });
+  const values = [[ isoToSerial(e.date), e.amount, e.purpose, e.status, e.note ]];
+  // Fill the first blank row already inside the table, so entries don't land after a gap
+  const rows = (await gx(`/tables/${TABLE}/rows`)).value || [];
+  const i = rows.findIndex(r => r.values[0].every(v => v === '' || v == null));
+  if (i >= 0) return gx(`/tables/${TABLE}/rows/itemAt(index=${i})`, { method: 'PATCH', body: JSON.stringify({ values }) });
+  return gx(`/tables/${TABLE}/rows`, { method: 'POST', body: JSON.stringify({ values }) });
 }
 
 async function loadRecent(){
