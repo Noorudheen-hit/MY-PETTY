@@ -317,14 +317,25 @@ async function loadSummary(){
   try{
     const sheets = (await gx(`/worksheets?$select=name,position`)).value.sort((a, b) => a.position - b.position);
     const name = sheets[0].name;
-    $('sumTitle').textContent = name;
+    $('sumTitle').textContent = 'Totals';
     const r = await gx(`/worksheets('${encodeURIComponent(name.replace(/'/g, "''"))}')/usedRange(valuesOnly=true)?$select=text`);
-    const rows = (r.text || []).map(row => row.map(t => String(t).trim()).filter(Boolean)).filter(row => row.length).slice(0, 40);
-    $('summary').innerHTML = rows.length ? rows.map(row => {
-      const label = row[0], value = row.slice(1).join('  '), u = label.toUpperCase();
-      const cls = !value ? 'head' : u.startsWith('SUBMITTED') ? 'done' : u.startsWith('FOR SUBMISSION') ? 'sub' : u === 'PAY' ? 'pay' : u === 'TOTAL' ? 'total' : '';
+    // Only the totals block: the label column around the "SUM OF B:B" cell, with the value to its right
+    const g = (r.text || []).map(row => row.map(t => String(t).trim()));
+    let ar = -1, ac = -1;
+    g.forEach((row, i) => { const j = row.findIndex(t => t.toUpperCase() === 'SUM OF B:B'); if (j >= 0 && ar < 0){ ar = i; ac = j; } });
+    const rows = [];
+    if (ar >= 0){
+      let top = ar; while (top > 0 && g[top-1][ac]) top--;
+      for (let i = top; i < g.length && g[i][ac]; i++){
+        const value = g[i].slice(ac + 1).find(Boolean) || '';
+        rows.push([g[i][ac], value]);
+      }
+    }
+    $('summary').innerHTML = rows.length ? rows.map(([label, value]) => {
+      const u = label.toUpperCase();
+      const cls = u.startsWith('SUBMITTED') ? 'done' : u.startsWith('FOR SUBMISSION') ? 'sub' : u === 'PAY' ? 'pay' : u === 'TOTAL' ? 'total' : '';
       return `<div class="sum ${cls}"><span>${esc(label)}</span><span class="v">${esc(value)}</span></div>`;
-    }).join('') : '<div class="empty">First sheet is empty</div>';
+    }).join('') : '<div class="empty">Totals block not found (looking for "SUM OF B:B")</div>';
   }catch(err){
     console.error(err);
     $('summary').innerHTML = `<div class="empty">Couldn't load summary (${esc(err.message.slice(0,80))})</div>`;
