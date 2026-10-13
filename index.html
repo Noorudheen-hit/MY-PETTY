@@ -165,10 +165,20 @@ async function initAuth(){
   await pca.initialize();
   const res = await pca.handleRedirectPromise().catch(e => { console.error(e); return null; });
   account = (res && res.account) || pca.getAllAccounts()[0];
-  if (!account){ show('signin'); return; }
+  if (!account){
+    // Returning user: restore the session without showing the sign-in screen
+    const hint = store.get('loginHint', '');
+    if (hint){
+      try{ account = (await pca.ssoSilent({ scopes: SCOPES, loginHint: hint })).account; }catch(e){}
+      let tried = false; try{ tried = sessionStorage.getItem('autoLogin') === '1'; sessionStorage.setItem('autoLogin', '1'); }catch(e){}
+      if (!account && !tried){ show('signin'); pca.loginRedirect({ scopes: SCOPES, loginHint: hint }); return; }
+    }
+    if (!account){ show('signin'); return; }
+  }
+  store.set('loginHint', account.username);
   pca.setActiveAccount(account);
   $('who').innerHTML = `${account.username}<br><button id="out">Sign out</button>`;
-  $('out').onclick = () => pca.logoutRedirect({ account });
+  $('out').onclick = () => { store.set('loginHint', ''); pca.logoutRedirect({ account }); };
   show('app');
   boot();
 }
