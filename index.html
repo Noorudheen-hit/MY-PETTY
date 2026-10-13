@@ -121,7 +121,7 @@ code{background:var(--chip);padding:2px 5px;border-radius:5px;font-size:12px;wor
 
 <script>
 /* ===== Settings ===== */
-const CLIENT_ID_DEFAULT = '';   // optional: paste your Azure client ID here so the setup screen never shows
+const CLIENT_ID_DEFAULT = '34a3b9a3-86fe-464f-9a72-661e4203b226';   // optional: paste your Azure client ID here so the setup screen never shows
 const FILE_ID   = '017SICUOOQOUYGMDCILJFI723JHLYKSMUC';     // MY_NEW_PETTY.xlsx in OneDrive
 const FILE_PATH = '/MY PETTY/MY_NEW_PETTY.xlsx';            // fallback if the file is replaced
 const SHEET     = 'MY BILL';
@@ -156,7 +156,7 @@ async function initAuth(){
   const clientId = CLIENT_ID_DEFAULT || store.get('clientId', '');
   if (!clientId){ show('setup'); return; }
   pca = new msal.PublicClientApplication({
-    auth: { clientId, authority: 'https://login.microsoftonline.com/alhabariservices.com', redirectUri },
+    auth: { clientId, authority: 'https://login.microsoftonline.com/25c9de45-0385-49d9-9909-d7c9ae02d65a', redirectUri },
     cache: { cacheLocation: 'localStorage' }
   });
   await pca.initialize();
