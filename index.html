@@ -67,6 +67,17 @@ h2 button{background:none;border:0;color:var(--navy);font:inherit;font-size:12px
 .center{text-align:center;padding:40px 8px}
 .center p{color:var(--muted);line-height:1.5}
 .hidden{display:none!important}
+.tabs{display:flex;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:14px}
+.tabs button{flex:1;border:0;border-radius:9px;padding:10px;background:none;color:var(--muted);font:inherit;font-weight:600;font-size:14px;cursor:pointer}
+.tabs button.on{background:var(--navy);color:#fff}
+.sum{display:flex;justify-content:space-between;gap:12px;padding:13px 14px;border-top:1px solid var(--line);font-weight:600;font-size:14px}
+.sum:first-child{border-top:0}
+.sum .v{font-family:"IBM Plex Mono",monospace;white-space:nowrap}
+.sum.head{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.sum.total{background:var(--navy);color:#fff}
+.sum.pay{background:#fde2e4;color:#b42318}
+.sum.sub{background:#fff1c2;color:#8a5a00}
+.sum.done{background:#d9f2e1;color:#16794a}
 code{background:var(--chip);padding:2px 5px;border-radius:5px;font-size:12px;word-break:break-all}
 </style>
 </head>
@@ -91,6 +102,8 @@ code{background:var(--chip);padding:2px 5px;border-radius:5px;font-size:12px;wor
   </section>
 
   <section id="app" class="hidden">
+    <div class="tabs" id="tabs"><button type="button" class="on" data-p="pageEntry">Entry</button><button type="button" data-p="pageSummary">Summary</button></div>
+    <div id="pageEntry">
     <div class="hand"><small>Bills in hand</small><b id="handTotal">—</b></div>
 
     <form class="card" id="f" autocomplete="off">
@@ -119,6 +132,11 @@ code{background:var(--chip);padding:2px 5px;border-radius:5px;font-size:12px;wor
 
     <h2><span>Recent entries</span><button id="refresh" type="button">Refresh</button></h2>
     <div class="list" id="recent"><div class="empty">Loading…</div></div>
+    </div>
+    <div id="pageSummary" class="hidden">
+      <h2 style="margin-top:0"><span id="sumTitle">Summary</span><button id="sumRefresh" type="button">Refresh</button></h2>
+      <div class="list" id="summary"><div class="empty">Loading…</div></div>
+    </div>
   </section>
 </div>
 
@@ -286,6 +304,31 @@ $('saveCid').onclick = () => {
   store.set('clientId', v); initAuth();
 };
 $('loginBtn').onclick = () => pca.loginRedirect({ scopes: SCOPES, prompt: 'select_account' });
+
+/* ===== Summary: first worksheet of the workbook ===== */
+async function loadSummary(){
+  try{
+    const sheets = (await gx(`/worksheets?$select=name,position`)).value.sort((a, b) => a.position - b.position);
+    const name = sheets[0].name;
+    $('sumTitle').textContent = name;
+    const r = await gx(`/worksheets('${encodeURIComponent(name.replace(/'/g, "''"))}')/usedRange(valuesOnly=true)?$select=text`);
+    const rows = (r.text || []).map(row => row.map(t => String(t).trim()).filter(Boolean)).filter(row => row.length).slice(0, 40);
+    $('summary').innerHTML = rows.length ? rows.map(row => {
+      const label = row[0], value = row.slice(1).join('  '), u = label.toUpperCase();
+      const cls = !value ? 'head' : u.startsWith('SUBMITTED') ? 'done' : u.startsWith('FOR SUBMISSION') ? 'sub' : u === 'PAY' ? 'pay' : u === 'TOTAL' ? 'total' : '';
+      return `<div class="sum ${cls}"><span>${esc(label)}</span><span class="v">${esc(value)}</span></div>`;
+    }).join('') : '<div class="empty">First sheet is empty</div>';
+  }catch(err){
+    console.error(err);
+    $('summary').innerHTML = `<div class="empty">Couldn't load summary (${esc(err.message.slice(0,80))})</div>`;
+  }
+}
+$('tabs').onclick = ev => {
+  const b = ev.target.closest('button'); if (!b) return;
+  [...$('tabs').children].forEach(x => { x.classList.toggle('on', x === b); $(x.dataset.p).classList.toggle('hidden', x !== b); });
+  if (b.dataset.p === 'pageSummary') loadSummary();
+};
+$('sumRefresh').onclick = loadSummary;
 
 async function boot(){
   $('dt').value = todayISO();
