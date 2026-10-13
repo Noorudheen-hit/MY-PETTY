@@ -331,9 +331,13 @@ async function loadSummary(){
         rows.push([g[i][ac], value]);
       }
     }
+    // "CREDIT CARD NOW" sits elsewhere on the sheet
+    g.some(row => { const j = row.findIndex(t => t.toUpperCase() === 'CREDIT CARD NOW'); if (j < 0) return false; rows.push([row[j], row.slice(j + 1).find(Boolean) || '']); return true; });
+    const WANT = ['TOTAL', 'PAY', 'DEBIT CARD', 'WALLET', 'FOR SUBMISSION', 'SUBMITTED AMOUNT', 'CREDIT CARD NOW'];
+    rows.splice(0, rows.length, ...WANT.map(w => rows.find(([l]) => l.toUpperCase() === w)).filter(Boolean));
     $('summary').innerHTML = rows.length ? rows.map(([label, value]) => {
       const u = label.toUpperCase();
-      const cls = u.startsWith('SUBMITTED') ? 'done' : u.startsWith('FOR SUBMISSION') ? 'sub' : u === 'PAY' ? 'pay' : u === 'TOTAL' ? 'total' : '';
+      const cls = u === 'CREDIT CARD NOW' ? 'pay' : u.startsWith('SUBMITTED') ? 'done' : u.startsWith('FOR SUBMISSION') ? 'sub' : u === 'PAY' ? 'pay' : u === 'TOTAL' ? 'total' : '';
       return `<div class="sum ${cls}"><span>${esc(label)}</span><span class="v">${esc(value)}</span></div>`;
     }).join('') : '<div class="empty">Totals block not found (looking for "SUM OF B:B")</div>';
   }catch(err){
