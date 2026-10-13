@@ -220,7 +220,11 @@ async function gx(path, opts = {}){
     wbBase = `${G}/me/drive/root:${encodeURI(FILE_PATH)}:/workbook`;
     r = await call(wbBase);
   }
-  if (!r.ok){ const b = await r.text(); throw new Error(r.status + ' ' + b.slice(0, 200)); }
+  if (!r.ok){
+    const b = await r.text();
+    let m = b.slice(0, 200); try{ const j = JSON.parse(b).error; m = (j.code ? j.code + ': ' : '') + (j.message || ''); }catch(e){}
+    const err = new Error(r.status + ' ' + m); err.status = r.status; throw err;
+  }
   return r.status === 204 ? null : r.json();
 }
 
@@ -259,8 +263,10 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':
 const queue = () => store.get('pending', []);
 async function flush(){
   let q = queue(), left = [];
-  for (const e of q){ try{ await addRow(e); }catch(err){ left.push(e); } }
+  let lastErr = '';
+  for (const e of q){ try{ await addRow(e); }catch(err){ left.push(e); lastErr = err.message; } }
   store.set('pending', left);
+  if (left.length) setMsg(`${left.length} pending entr${left.length>1?'ies':'y'} not saved: ${lastErr.slice(0,160)}`, 'err');
   return { sent: q.length - left.length, left: left.length };
 }
 
@@ -286,6 +292,7 @@ $('f').onsubmit = async ev => {
     loadRecent();
   }catch(err){
     console.error(err);
+    if (err.status && err.status < 500 && err.status !== 429){ setMsg(`Excel rejected the entry: ${err.message.slice(0,200)}`, 'err'); return; }
     store.set('pending', [...queue(), entry]);
     setMsg(`Couldn't reach OneDrive — saved on this phone, will retry (${queue().length} pending)`, 'warn');
   }finally{
