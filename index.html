@@ -62,6 +62,8 @@ h2 button{background:none;border:0;color:var(--navy);font:inherit;font-size:12px
 .item .d{font-size:12px;color:var(--muted)}
 .item .p{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .item .p i{color:var(--muted);font-style:normal;font-size:12px}
+.item[data-i]{cursor:pointer}
+.item .a i.ed{font-style:normal;opacity:.5;font-size:12px}
 .item .a{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:14px}
 .empty{padding:16px;color:var(--muted);font-size:14px;text-align:center}
 .center{text-align:center;padding:40px 8px}
@@ -129,6 +131,7 @@ code{background:var(--chip);padding:2px 5px;border-radius:5px;font-size:12px;wor
         </div>
       </div>
       <button class="go" id="enter" type="submit">ENTER</button>
+      <button class="go hidden" id="cancelEdit" type="button" style="background:var(--chip);color:var(--ink);margin-top:8px;font-size:15px;padding:12px">Cancel edit</button>
       <div class="msg" id="msg"></div>
     </form>
 
@@ -239,18 +242,39 @@ async function addRow(e){
   return gx(`/tables/${TABLE}/rows`, { method: 'POST', body: JSON.stringify({ values }) });
 }
 
+let recentRows = {}, editIdx = null;
+const serialToISO = s => new Date(Math.round((s - 25569) * 86400000)).toISOString().slice(0, 10);
+function setStatus(v){ status = v; [...$('status').children].forEach(x => x.classList.toggle('on', x.dataset.v === v)); }
+function endEdit(){
+  editIdx = null; $('enter').textContent = 'ENTER'; $('cancelEdit').classList.add('hidden');
+  $('amt').value = ''; $('purpose').value = ''; $('note').value = ''; $('dt').value = todayISO(); setStatus('HAND');
+}
+$('recent').onclick = ev => {
+  const it = ev.target.closest('.item[data-i]'); if (!it) return;
+  const v = recentRows[it.dataset.i]; if (!v) return;
+  editIdx = v.idx;
+  $('amt').value = v[1]; $('purpose').value = v[2] || ''; $('note').value = v[4] || '';
+  $('dt').value = typeof v[0] === 'number' ? serialToISO(v[0]) : todayISO();
+  setStatus(v[3] === 'SUBMITTED' ? 'SUBMITTED' : 'HAND');
+  $('enter').textContent = 'UPDATE'; $('cancelEdit').classList.remove('hidden');
+  setMsg('Editing entry — change it and tap UPDATE');
+  $('f').scrollIntoView({ behavior: 'smooth' });
+};
+
 async function loadRecent(){
   try{
     const data = await gx(`/tables/${TABLE}/rows`);
-    const rows = (data.value || []).map(r => r.values[0]).filter(v => v[1] !== '' && v[1] != null);
+    const rows = (data.value || []).map((r, i) => Object.assign(r.values[0], { idx: i })).filter(v => v[1] !== '' && v[1] != null);
     const purposes = [...new Set(rows.map(v => String(v[2] || '').trim()).filter(Boolean))];
     $('purposes').innerHTML = purposes.map(p => `<option value="${p.replace(/"/g,'&quot;')}">`).join('');
-    const last = rows.slice(-12).reverse();
+    // Newest date first (row order breaks ties), last 4 only
+    const last = [...rows].sort((a, b) => ((+b[0] || 0) - (+a[0] || 0)) || (b.idx - a.idx)).slice(0, 4);
+    recentRows = {}; last.forEach(v => recentRows[v.idx] = v);
     $('recent').innerHTML = last.length ? last.map(v => `
-      <div class="item">
+      <div class="item" data-i="${v.idx}">
         <div class="d">${serialToLabel(v[0])}</div>
         <div class="p">${esc(v[2] || '—')}${v[4] ? ` <i>· ${esc(v[4])}</i>` : ''}${v[3] && v[3] !== 'HAND' ? ` <i>· ${esc(v[3])}</i>` : ''}</div>
-        <div class="a">${Number(v[1]).toLocaleString('en-US',{minimumFractionDigits:2})}</div>
+        <div class="a">${Number(v[1]).toLocaleString('en-US',{minimumFractionDigits:2})} <i class="ed">✎</i></div>
       </div>`).join('') : '<div class="empty">No entries yet</div>';
   }catch(err){
     console.error(err);
@@ -288,6 +312,14 @@ $('f').onsubmit = async ev => {
   if (!(amount > 0)){ setMsg('Enter an amount', 'err'); $('amt').focus(); return; }
   const entry = { date: $('dt').value || todayISO(), amount, purpose: $('purpose').value.trim(), note: $('note').value.trim(), status };
   $('enter').disabled = true; setMsg('Saving to Excel…');
+  if (editIdx != null){
+    try{
+      await gx(`/tables/${TABLE}/rows/itemAt(index=${editIdx})`, { method: 'PATCH', body: JSON.stringify({ values: [[ isoToSerial(entry.date), entry.amount, entry.purpose, entry.status, entry.note ]] }) });
+      setMsg(`✓ Updated ${fmtQR(amount)}`, 'ok'); endEdit(); loadRecent();
+    }catch(err){ console.error(err); setMsg(`Couldn't update: ${err.message.slice(0,200)}`, 'err'); }
+    finally{ $('enter').disabled = false; }
+    return;
+  }
   try{
     await addRow(entry);
     setMsg(`✓ Saved ${fmtQR(amount)} to MY BILL`, 'ok');
@@ -304,6 +336,7 @@ $('f').onsubmit = async ev => {
   }
 };
 
+$('cancelEdit').onclick = () => { endEdit(); setMsg(''); };
 $('refresh').onclick = async () => {
   if (queue().length){ const r = await flush(); if (r.sent) setMsg(`✓ Synced ${r.sent} pending entr${r.sent>1?'ies':'y'}`, 'ok'); }
   loadRecent();
