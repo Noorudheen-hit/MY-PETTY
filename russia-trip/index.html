@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Russia Trip</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#16181d;--mute:#6b7280;--line:#e3e6ea;--acc:#1f5fd1}
+@media (prefers-color-scheme:dark){:root{--bg:#111316;--card:#1a1d22;--ink:#eceef1;--mute:#9aa0a8;--line:#2a2e35;--acc:#6b9cff}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,sans-serif}
+main{max-width:560px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:8px 0 2px}.sub{color:var(--mute);margin:0 0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+h2{font-size:15px;margin:0 0 10px;color:var(--mute);text-transform:uppercase;letter-spacing:.04em}
+input,select,button{font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;width:100%}
+button{background:var(--acc);color:#fff;border:0;font-weight:600}
+.row{display:flex;gap:8px;margin-bottom:8px}.row>*{flex:1}
+.item{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
+.item:first-child{border-top:0}.x{background:none;color:var(--mute);width:auto;padding:0 6px}
+.tot{font-size:24px;font-weight:700}.m{color:var(--mute);font-size:14px}
+label.chk{display:flex;gap:10px;align-items:center;padding:6px 0}label.chk input{width:auto}
+.done{text-decoration:line-through;color:var(--mute)}
+</style>
+</head>
+<body>
+<main>
+<h1>Russia Trip</h1>
+<p class="sub">noorudheen-hit · saved on this device</p>
+
+<section class="card">
+  <h2>Total spent</h2>
+  <div class="tot" id="tot">0 RUB</div>
+  <div class="m" id="conv"></div>
+  <div class="row" style="margin-top:10px"><input id="rate" type="number" step="0.0001" placeholder="1 RUB = ? AED"></div>
+</section>
+
+<section class="card">
+  <h2>Add expense</h2>
+  <div class="row"><input id="amt" type="number" step="0.01" placeholder="Amount (RUB)"><input id="dt" type="date"></div>
+  <div class="row"><select id="cat"><option>Food</option><option>Transport</option><option>Hotel</option><option>Tickets</option><option>Shopping</option><option>Other</option></select><input id="what" placeholder="What"></div>
+  <button id="add">Add</button>
+</section>
+
+<section class="card"><h2>Expenses</h2><div id="list"></div></section>
+
+<section class="card">
+  <h2>Checklist</h2>
+  <div class="row"><input id="todo" placeholder="e.g. Visa, SIM card, cash"><button id="addTodo" style="flex:0 0 80px">Add</button></div>
+  <div id="todos"></div>
+</section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const KEY = 'russia-trip-v1';
+let s = { exp: [], todos: [
+  {t:'Visa / e-visa',d:false},{t:'Hotel bookings',d:false},{t:'Cash in RUB (foreign cards may not work)',d:false},
+  {t:'Local SIM / eSIM',d:false},{t:'Warm clothes',d:false}], rate: '' };
+try { const v = JSON.parse(localStorage.getItem(KEY)); if (v) s = v; } catch {}
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch {} };
+const esc = t => String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt = n => n.toLocaleString('en-US', {maximumFractionDigits: 2});
+$('dt').value = new Date().toISOString().slice(0, 10);
+$('rate').value = s.rate;
+
+function render(){
+  const total = s.exp.reduce((a, e) => a + e.a, 0);
+  $('tot').textContent = fmt(total) + ' RUB';
+  $('conv').textContent = +s.rate ? '≈ ' + fmt(total * s.rate) + ' AED' : '';
+  $('list').innerHTML = s.exp.length ? [...s.exp].sort((a, b) => b.d.localeCompare(a.d)).map(e => `
+    <div class="item"><div><b>${esc(e.c)}</b> ${esc(e.w)}<div class="m">${e.d}</div></div>
+    <div>${fmt(e.a)} <button class="x" data-id="${e.id}">✕</button></div></div>`).join('') : '<div class="m">No expenses yet</div>';
+  $('todos').innerHTML = s.todos.map((t, i) => `
+    <label class="chk"><input type="checkbox" data-i="${i}" ${t.d ? 'checked' : ''}><span class="${t.d ? 'done' : ''}">${esc(t.t)}</span></label>`).join('');
+}
+$('add').onclick = () => {
+  const a = parseFloat($('amt').value); if (!a) return $('amt').focus();
+  s.exp.push({ id: Date.now(), a, d: $('dt').value, c: $('cat').value, w: $('what').value.trim() });
+  $('amt').value = ''; $('what').value = ''; save(); render();
+};
+$('list').onclick = e => { const id = e.target.dataset.id; if (id && confirm('Delete this expense?')) { s.exp = s.exp.filter(x => x.id != id); save(); render(); } };
+$('addTodo').onclick = () => { const t = $('todo').value.trim(); if (t) { s.todos.push({t, d:false}); $('todo').value=''; save(); render(); } };
+$('todos').onchange = e => { const i = e.target.dataset.i; if (i != null) { s.todos[i].d = e.target.checked; save(); render(); } };
+$('rate').oninput = () => { s.rate = $('rate').value; save(); render(); };
+render();
+</script>
+</body>
+</html>
