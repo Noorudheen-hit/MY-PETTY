@@ -143,10 +143,8 @@ code{background:var(--chip);padding:2px 5px;border-radius:5px;font-size:12px;wor
       <div class="list" id="summary"><div class="empty">Loading…</div></div>
     </div>
     <div id="pageDetails" class="hidden">
-      <h2 style="margin-top:0"><span>By purpose</span><button id="detRefresh" type="button">Refresh</button></h2>
+      <h2 style="margin-top:0"><span id="detTitle">Details</span><button id="detRefresh" type="button">Refresh</button></h2>
       <div class="list" id="byPurpose"><div class="empty">Loading…</div></div>
-      <h2>All entries</h2>
-      <div class="list" id="allEntries"></div>
     </div>
   </section>
 </div>
@@ -415,22 +413,25 @@ $('tabs').onclick = ev => {
 };
 $('sumRefresh').onclick = loadSummary;
 
-/* ===== Details: cash spent per purpose, then every entry ===== */
+/* ===== Details: the worksheet headed PURPOSE / CASH / DATE, shown as it is ===== */
 async function loadDetails(){
   try{
-    const rows = ((await gx(`/tables/${TABLE}/rows`)).value || []).map(r => r.values[0]).filter(v => v[1] !== '' && v[1] != null);
-    const by = {};
-    rows.forEach(v => { const k = String(v[2] || '').trim() || '—'; (by[k] = by[k] || { n: 0, sum: 0 }); by[k].n++; by[k].sum += +v[1] || 0; });
-    const total = rows.reduce((t, v) => t + (+v[1] || 0), 0);
-    $('byPurpose').innerHTML = rows.length ? Object.entries(by).sort((a, b) => b[1].sum - a[1].sum).map(([p, x]) =>
-      `<div class="sum"><span>${esc(p)} <i>· ${x.n}</i></span><span class="v">${fmtQR(x.sum)}</span></div>`).join('') +
-      `<div class="sum total"><span>TOTAL</span><span class="v">${fmtQR(total)}</span></div>` : '<div class="empty">No entries yet</div>';
-    $('allEntries').innerHTML = [...rows].sort((a, b) => (+b[0] || 0) - (+a[0] || 0)).map(v => `
-      <div class="item">
-        <div class="d">${serialToLabel(v[0])}</div>
-        <div class="p">${esc(v[2] || '—')}${v[4] ? ` <i>· ${esc(v[4])}</i>` : ''}</div>
-        <div class="a">${Number(v[1]).toLocaleString('en-US',{minimumFractionDigits:2})}</div>
-      </div>`).join('');
+    const sheets = (await gx(`/worksheets?$select=name,position`)).value.sort((a, b) => a.position - b.position);
+    let g = null, name = '';
+    for (const s of sheets){
+      const r = await gx(`${sheetPath(s.name)}/usedRange(valuesOnly=true)?$select=text`);
+      const t = (r.text || []).map(row => row.map(x => String(x).trim()));
+      const h = t.findIndex(row => row[0] && row[0].toUpperCase() === 'PURPOSE' && String(row[1]).toUpperCase() === 'CASH');
+      if (h >= 0){ g = t.slice(h + 1); name = s.name; break; }
+    }
+    if (!g){ $('byPurpose').innerHTML = '<div class="empty">Sheet with PURPOSE / CASH headers not found</div>'; return; }
+    $('detTitle').textContent = name;
+    const rows = g.filter(r => r[0] || r[1]);
+    $('byPurpose').innerHTML = rows.length ? rows.map(r => {
+      const u = (r[0] || '').toUpperCase();
+      const cls = u.startsWith('FOR SUBMISSION') ? 'sub' : u === 'BILL HAND' ? 'total' : '';
+      return `<div class="sum ${cls}"><span>${esc(r[0] || '—')}${r[2] ? ` <i>· ${esc(r[2])}</i>` : ''}</span><span class="v">${esc(r[1] || '—')}</span></div>`;
+    }).join('') : '<div class="empty">No rows</div>';
   }catch(err){
     console.error(err);
     $('byPurpose').innerHTML = `<div class="empty">Couldn't load details (${esc(err.message.slice(0,80))})</div>`;
